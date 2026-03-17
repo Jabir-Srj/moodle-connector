@@ -108,6 +108,82 @@ downloads/
 
 ---
 
+## MCP Server (Claude Code, OpenCode, etc.)
+
+The connector includes an **MCP (Model Context Protocol) server** that exposes all Moodle functions as tools for AI coding assistants.
+
+### Supported Clients
+- ✅ Claude Code (Anthropic)
+- ✅ OpenCode
+- ✅ Any MCP-compatible client
+
+### Setup
+
+1. **Install MCP dependency:**
+```bash
+pip install -r requirements.txt
+```
+
+2. **Create your config:**
+```bash
+cp config.template.json config.json
+# Add your Moodle token
+```
+
+3. **Add to Claude Code config file:**
+
+**For Claude (claude_desktop_config.json):**
+```json
+{
+  "mcpServers": {
+    "moodle-connector": {
+      "command": "python",
+      "args": ["/path/to/moodle-connector/mcp_server.py"],
+      "env": {
+        "MOODLE_CRED_PASSWORD": "your-encryption-password"
+      }
+    }
+  }
+}
+```
+
+Replace `/path/to/moodle-connector/` with your actual path.
+
+4. **Restart Claude Code** — moodle-connector tools will appear!
+
+### Available MCP Tools
+
+Once connected, these tools are available in Claude Code:
+
+- **`courses()`** — List all enrolled courses
+- **`grades(course_id?)`** — Get grade overview or per-course grades
+- **`assignments(course_id?)`** — Get all assignments with deadlines
+- **`materials(course_id?)`** — Get course materials and resources
+- **`deadlines(course_id?)`** — Get upcoming deadlines and calendar events
+- **`announcements(course_id?)`** — Get course announcements
+- **`download(url, output?)`** — Download a file from Moodle
+- **`summary()`** — Get complete summary of all data
+
+### Example: Using in Claude Code
+
+Claude Code can now natively call Moodle functions:
+
+```python
+# Get all courses
+courses = courses()
+
+# Check grades for specific course
+grades = grades(course_id=44864)
+
+# Get upcoming assignments
+assignments = assignments()
+
+# Download a file
+download(url="https://mytimes.taylors.edu.my/...", output="file.pdf")
+```
+
+---
+
 ## Authentication
 
 ### Automatic (Recommended)
@@ -241,12 +317,13 @@ connector.download("https://mytimes.taylors.edu.my/...", "output.pdf")
 ```
 moodle_connector/
 ├── moodle_connector.py              # Main connector class
+├── mcp_server.py                    # MCP server for Claude Code / OpenCode
 ├── batch_downloader.py              # Generic batch downloader
 ├── downloads.example.json           # Example download config
-├── downloads.json                   # Your config (gitignored, copy from example)
-├── config.json                      # Your Moodle config (gitignored)
 ├── config.template.json             # Template Moodle config
+├── mcp.config.json                  # Example MCP config
 ├── requirements.txt                 # Python dependencies
+├── LICENSE.md                       # GPLv3 license
 ├── cache/                           # API cache + files (auto-created)
 ├── downloads/                       # Downloaded materials (auto-created)
 │   ├── Module_Name_1/

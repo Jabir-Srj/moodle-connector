@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "moodle-connector": {
+      "command": "python",
+      "args": ["/path/to/mcp_server.py"],
+      "env": {
+        "PYTHONUNBUFFERED": "1",
+        "MOODLE_CRED_PASSWORD": "your-encryption-password"
+      }
+    }
+  }
+}
