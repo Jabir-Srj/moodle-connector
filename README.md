@@ -51,50 +51,6 @@ python moodle_connector.py summary
 
 ---
 
-## Batch Download Materials
-
-### Using the batch downloader
-
-```bash
-python batch_downloader_connector.py
-```
-
-This downloads **21 key files** (133 MB) from your courses:
-
-**File Structure Created:**
-
-```
-downloads_via_connector/
-├── Machine_Learning/
-│   ├── Week1_Python_Basics.zip              (66 MB)
-│   ├── Week2_ML_Intro.zip                   (1 MB)
-│   ├── Week3_Preprocessing_Regression.zip   (1.2 MB)
-│   ├── Week4_Classification.zip             (1.2 MB)
-│   ├── Week5_Advanced_Classification.zip    (0.9 MB)
-│   ├── Week6_SVM_Probability.zip            (0.6 MB)
-│   └── Week7_Applications_Ethics.zip        (2 MB)
-│
-└── Big_Data/
-    ├── Chapter1_BigData_Introduction.pdf     (4.4 MB)
-    ├── Chapter2_Hadoop_HBase.pdf             (3.8 MB)
-    ├── Chapter3_MapReduce.pdf                (3 MB)
-    ├── Chapter4_Part1_BigData_Tech.pdf       (3.3 MB)
-    ├── Chapter4_Part2_BigData_Tech.pdf       (3.8 MB)
-    ├── Chapter5_ML_BigData_Integration.pdf   (3 MB)
-    ├── Chapter6_BigData_Analytics.pdf        (2.6 MB)
-    ├── Practical3_HDFS_Operations.pdf        (4 MB)
-    ├── Practical5_MapReduce.pdf              (0.4 MB)
-    ├── Practical6_HIVE_PIG.pdf               (0.4 MB)
-    ├── Practical7_Apache_Impala.pdf          (0.7 MB)
-    ├── Practical8_Apache_Spark.pdf           (0.5 MB)
-    ├── EXAM_Revision_Summary.pdf             (4.6 MB)
-    └── EXAM_Sample_Questions.pdf             (0.5 MB)
-```
-
-**All files are downloaded to:** `./downloads_via_connector/`
-
----
-
 ## Authentication
 
 ### Automatic (Recommended)
