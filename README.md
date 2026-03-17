@@ -190,8 +190,7 @@ moodle_connector/
 ├── requirements.txt                 # Python dependencies
 ├── cache/                           # API cache + files (auto-created)
 ├── downloads_via_connector/         # Downloaded materials (auto-created)
-│   ├── Machine_Learning/
-│   └── Big_Data/
+│ 
 └── README.md                        # This file
 ```
 
