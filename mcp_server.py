@@ -10,7 +10,6 @@ Usage:
 
 import sys
 import io
-import json
 from pathlib import Path
 from typing import Any
 
@@ -19,8 +18,11 @@ if sys.platform == 'win32':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
+from mcp.server.models import InitializationOptions
 from mcp.server import Server
-from mcp.types import Tool, TextContent, ToolResult
+from mcp.types import Tool, TextContent
+import mcp.server.stdio
+
 from moodle_connector import MoodleConnector
 
 # Initialize MCP server
@@ -36,7 +38,7 @@ def get_connector() -> MoodleConnector:
     if _connector is None:
         _connector = MoodleConnector(
             config_path=Path('config.json'),
-            password='test-pass'  # Can be overridden via env var MOODLE_CRED_PASSWORD
+            password='test-pass'
         )
     return _connector
 
@@ -144,7 +146,7 @@ async def list_tools() -> list[Tool]:
         ),
         Tool(
             name="summary",
-            description="Get full summary of all course data (courses, grades, assignments, deadlines, announcements)",
+            description="Get full summary of all course data",
             inputSchema={
                 "type": "object",
                 "properties": {},
@@ -155,7 +157,7 @@ async def list_tools() -> list[Tool]:
 
 
 @server.call_tool()
-async def call_tool(name: str, arguments: dict) -> ToolResult:
+async def call_tool(name: str, arguments: dict) -> str:
     """Handle tool calls from MCP clients"""
     try:
         connector = get_connector()
@@ -184,28 +186,27 @@ async def call_tool(name: str, arguments: dict) -> ToolResult:
         elif name == "summary":
             result = connector.summary()
         else:
-            return ToolResult(
-                content=[TextContent(type="text", text=f"Unknown tool: {name}")],
-                isError=True
-            )
+            return f"Unknown tool: {name}"
         
-        return ToolResult(
-            content=[TextContent(type="text", text=result)],
-            isError=False
-        )
+        return result
     
     except Exception as e:
-        return ToolResult(
-            content=[TextContent(type="text", text=f"Error: {str(e)}")],
-            isError=True
-        )
+        return f"Error: {str(e)}"
 
 
-def main():
+async def main():
     """Run the MCP server"""
-    import asyncio
-    asyncio.run(server.run(sys.stdin.buffer, sys.stdout.buffer))
+    async with mcp.server.stdio.stdio_server(server) as (read_stream, write_stream):
+        await server.run(
+            read_stream,
+            write_stream,
+            InitializationOptions(
+                server_name="moodle-connector",
+                server_version="1.0.0",
+            ),
+        )
 
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())
