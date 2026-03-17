@@ -348,7 +348,7 @@ pip install -r requirements.txt
 
 ## License
 
-GNU General Public License v3.0
+MIT License
 
 ---
 
