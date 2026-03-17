@@ -1,0 +1,44 @@
+# Moodle Connector — .gitignore
+
+# Secrets & Config
+config.json
+credentials.enc
+*.enc
+.env
+.env.local
+
+# Tests (may contain credentials)
+test_*.py
+test_*.ps1
+debug_*.py
+
+# Cache
+cache/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Environment
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Downloads (user-specific)
+downloads/
+downloads_via_connector/
+
+# Logs
+*.log
