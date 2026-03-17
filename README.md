@@ -348,17 +348,12 @@ pip install -r requirements.txt
 
 ## License
 
-Private use. Not for distribution.
+GNU General Public License v3.0
 
 ---
 
 ## Author
 
-Jabir (Jsi0503@taylors.edu.my)  
-Taylor's University, Kuala Lumpur, Malaysia
+Jabir (Jabirsrj8@gmail.com)  
 
 ---
-
-## Last Updated
-
-March 17, 2026 — Generic batch downloader + JSON config for plug-and-play usage
