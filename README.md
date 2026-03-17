@@ -51,6 +51,63 @@ python moodle_connector.py summary
 
 ---
 
+## Batch Download (Any Module)
+
+The connector includes a **generic batch downloader** that works with any Moodle module. No hardcoding needed!
+
+### Setup
+
+1. **Copy the example config:**
+```bash
+cp downloads.example.json downloads.json
+```
+
+2. **Edit `downloads.json`** to add your modules and file URLs:
+```json
+{
+  "downloads": [
+    {
+      "module": "Your Course Name",
+      "course_id": 12345,
+      "files": [
+        {
+          "name": "Lecture1.pdf",
+          "url": "https://mytimes.taylors.edu.my/webservice/pluginfile.php/..."
+        },
+        {
+          "name": "Lecture2.pdf",
+          "url": "https://mytimes.taylors.edu.my/webservice/pluginfile.php/..."
+        }
+      ]
+    }
+  ]
+}
+```
+
+3. **Run the downloader:**
+```bash
+# Uses downloads.json by default
+python batch_downloader.py
+
+# Or specify custom config/output
+python batch_downloader.py --config my_courses.json --output /path/to/downloads
+```
+
+### File Structure Created
+```
+downloads/
+├── Your_Course_Name/
+│   ├── Lecture1.pdf
+│   └── Lecture2.pdf
+├── Another_Course/
+│   ├── Chapter1.pdf
+│   └── Chapter2.pdf
+```
+
+**No modification needed!** Just edit the JSON, run the script, and files are organized by module.
+
+---
+
 ## Authentication
 
 ### Automatic (Recommended)
@@ -184,13 +241,17 @@ connector.download("https://mytimes.taylors.edu.my/...", "output.pdf")
 ```
 moodle_connector/
 ├── moodle_connector.py              # Main connector class
-├── batch_downloader_connector.py    # Batch file downloader
-├── config.json                      # Your config (gitignored)
-├── config.template.json             # Template config
+├── batch_downloader.py              # Generic batch downloader
+├── downloads.example.json           # Example download config
+├── downloads.json                   # Your config (gitignored, copy from example)
+├── config.json                      # Your Moodle config (gitignored)
+├── config.template.json             # Template Moodle config
 ├── requirements.txt                 # Python dependencies
 ├── cache/                           # API cache + files (auto-created)
-├── downloads_via_connector/         # Downloaded materials (auto-created)
-│ 
+├── downloads/                       # Downloaded materials (auto-created)
+│   ├── Module_Name_1/
+│   ├── Module_Name_2/
+│   └── ...
 └── README.md                        # This file
 ```
 
@@ -223,4 +284,4 @@ Taylor's University, Kuala Lumpur, Malaysia
 
 ## Last Updated
 
-March 17, 2026 — Grades API fix + batch downloader with organized file structure
+March 17, 2026 — Generic batch downloader + JSON config for plug-and-play usage
