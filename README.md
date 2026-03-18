@@ -1,7 +1,7 @@
 ---
 name: moodle-connector
 description: "Moodle REST API client, batch downloader, and MCP server for Claude Code integration"
-metadata: { "author": "Jabir Iliyas Suraj-Deen", "license": "GPLv3", "homepage": "https://github.com/Jabir-Srj/moodle-connector", "repository": "https://github.com/Jabir-Srj/moodle-connector.git", "tags": ["moodle", "education", "lms", "api", "batch-download", "mcp", "claude-code"] }
+metadata: { "author": "Jabir Iliyas Suraj-Deen", "license": "MIT-0", "homepage": "https://github.com/Jabir-Srj/moodle-connector", "repository": "https://github.com/Jabir-Srj/moodle-connector.git", "tags": ["moodle", "education", "lms", "api", "batch-download", "mcp", "claude-code"] }
 ---
 
 # Moodle Connector
