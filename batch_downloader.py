@@ -111,10 +111,17 @@ def main():
         print(f"\n✅ Loaded config: {args.config}")
         print(f"📁 Output directory: {args.output.resolve()}")
         
+        # Get password from env var or args
+        password = args.password or os.getenv('MOODLE_CRED_PASSWORD')
+        if not password:
+            # Prompt interactively if not provided
+            import getpass
+            password = getpass.getpass("Enter encryption password: ")
+        
         # Initialize connector
         connector = MoodleConnector(
             config_path=Path('config.json'),
-            password=args.password
+            password=password
         )
         print("✅ Connector initialized")
         

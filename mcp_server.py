@@ -190,8 +190,12 @@ async def call_tool(name: str, arguments: dict) -> str:
         
         return result
     
+    except RuntimeError as e:
+        # Re-raise MOODLE_CRED_PASSWORD errors with context
+        return f"Configuration error: {str(e)}"
     except Exception as e:
-        return f"Error: {str(e)}"
+        # Sanitize error messages: don't leak internal details to MCP client
+        return f"Tool execution failed. Please check your configuration and try again."
 
 
 async def main():
