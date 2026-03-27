@@ -1,8 +1,10 @@
 ---
 name: moodle-connector
 description: "Moodle REST API client, batch downloader, and MCP server for Claude Code integration"
-metadata: { "author": "Jabir Iliyas Suraj-Deen", "license": "MIT", "homepage": "https://github.com/Jabir-Srj/moodle-connector", "repository": "https://github.com/Jabir-Srj/moodle-connector.git", "tags": ["moodle", "education", "lms", "api", "batch-download", "mcp", "claude-code"] }
+metadata: { "author": "Jabir Iliyas Suraj-Deen, Sebastian Guevara M.", "license": "MIT", "homepage": "https://github.com/Jabir-Srj/moodle-connector", "repository": "https://github.com/Jabir-Srj/moodle-connector.git", "tags": ["moodle", "education", "lms", "api", "batch-download", "mcp", "claude-code"] }
 ---
+
+> **English** | [Español](README.es.md)
 
 # Moodle Connector
 
@@ -15,10 +17,15 @@ metadata: { "author": "Jabir Iliyas Suraj-Deen", "license": "MIT", "homepage": "
 - Fetch materials, deadlines, announcements
 - Download files with aggressive caching
 
+**Microsoft SSO / MFA Support**
+- Automated Mobile Launch Flow (same as the official Moodle app)
+- Works with any SSO provider: Microsoft Azure AD, Google, SAML, etc.
+- Browser opens for interactive login - closes automatically once token is captured
+
 **Multiple Integration Modes**
 - **CLI:** `python moodle_connector.py courses`
 - **Python Library:** `from moodle_connector import MoodleConnector`
-- **MCP Protocol:** Native integration with Claude Code, OpenCode
+- **MCP Protocol:** Native integration with Claude Code, OpenCode, and OpenClaw
 
 **Generic Batch Downloader**
 - JSON-driven configuration (zero code modification)
@@ -38,30 +45,50 @@ Once installed via `clawhub install moodle-connector`:
 ```bash
 cd ./skills/moodle-connector
 pip install -r requirements.txt
-playwright install chromium
+python -m playwright install chromium
 ```
 
 ## Quick Start
 
-### 1. Setup Moodle Token
+### 1. Configure
 
 ```bash
 cp config.template.json config.json
-# Edit config.json with your Moodle web service token
+# Edit config.json: set base_url to your Moodle instance
 ```
 
-### 2. Use CLI
+### 2. Login (SSO / MFA)
+
+```bash
+MOODLE_CRED_PASSWORD=any-password python moodle_connector.py login
+```
+
+A browser window will open. Complete your Microsoft (or other SSO) login and MFA normally - the window closes automatically once the token is captured. You should see:
+
+```
+# ✅ Authentication Successful
+- User: Your Name
+- Site: Your Moodle Site
+- Moodle version: 4.x.x
+```
+
+> If your instance allows direct username/password login (no SSO), you can also run:
+> `python moodle_connector.py login --username you@email.com --user-password yourpassword`
+
+### 3. Use CLI
 
 ```bash
 python moodle_connector.py courses        # List all courses
 python moodle_connector.py grades         # Check grades
-python moodle_connector.py assignments    # View assignments
-python moodle_connector.py materials --course-id 44864
-python moodle_connector.py download "https://mytimes.taylors.edu.my/..." --output myfile.pdf
-python moodle_connector.py summary        # Full markdown export
+python moodle_connector.py assignments    # View assignments with deadlines
+python moodle_connector.py announcements  # Course announcements
+python moodle_connector.py materials --course-id 12345
+python moodle_connector.py deadlines      # Upcoming calendar events
+python moodle_connector.py download "https://your-moodle-site.example.com/..." --output myfile.pdf
+python moodle_connector.py summary        # Full markdown export (all data)
 ```
 
-### 3. Use Python Library
+### 4. Use Python Library
 
 ```python
 from moodle_connector import MoodleConnector
@@ -84,7 +111,7 @@ content = connector.summary()
 file_content = connector.download("https://...")
 ```
 
-### 4. Batch Download (Any Module)
+### 5. Batch Download (Any Module)
 
 ```bash
 cp downloads.example.json downloads.json
@@ -104,7 +131,34 @@ downloads/
     └── ...
 ```
 
-## MCP Integration (Claude Code / OpenCode)
+## Tampermonkey Token Helper
+
+If the connector is running on a headless server (no display), get the token from a PC or Mac with a browser and copy it over. Install the included userscript on that machine:
+
+1. Install [Tampermonkey](https://www.tampermonkey.net/) in your browser
+2. Open Tampermonkey - Create new script - paste the contents of [`moodle_token_helper.user.js`](moodle_token_helper.user.js)
+3. Navigate to your Moodle site while logged in
+4. Click the **"Get Token"** button (bottom right corner)
+5. Copy the token and paste it into `config.json` under `web_service_token`
+
+The script uses `GM_xmlhttpRequest` to call the Mobile Launch endpoint with your active session cookies and intercepts the `moodlemobile://` redirect without leaving the page.
+
+To support additional Moodle instances, add `@match` and `@connect` lines to the script header.
+
+## How Authentication Works
+
+This connector uses Moodle's **Mobile Launch Flow** - the same mechanism used by the official Moodle mobile app. It works with any SSO provider without needing API credentials or special server configuration.
+
+**Flow:**
+1. Browser navigates to `/admin/tool/mobile/launch.php`
+2. If no session exists, Moodle redirects to the SSO provider (e.g. Microsoft)
+3. User completes login + MFA interactively
+4. SSO redirects back to Moodle, which issues a `moodlemobile://token=<base64>` redirect
+5. The connector intercepts this redirect, decodes the token, and closes the browser
+
+The token is cached in an encrypted file (`credentials.enc`) and reused until it expires.
+
+## MCP Integration (Claude Code / OpenCode / OpenClaw)
 
 **REQUIRED:** Set `MOODLE_CRED_PASSWORD` environment variable before starting Claude Code.
 
@@ -124,17 +178,17 @@ Add to your `claude_desktop_config.json`:
 }
 ```
 
-**Important:** Replace `your-encryption-password` with your actual encryption password used in `config.json`.
+**Important:** Replace `your-encryption-password` with the actual password used when running `login`.
 
 Restart Claude Code. All 8 Moodle functions are now available as native MCP tools:
-- `courses()` — List enrolled courses
-- `grades()` — Get grades
-- `assignments()` — Get assignments
-- `materials()` — Get course materials
-- `deadlines()` — Get upcoming deadlines
-- `announcements()` — Get course news
-- `download(url, output?)` — Download files
-- `summary()` — Get complete data export
+- `courses()` - List enrolled courses
+- `grades()` - Get grades
+- `assignments()` - Get assignments
+- `materials()` - Get course materials
+- `deadlines()` - Get upcoming deadlines
+- `announcements()` - Get course news
+- `download(url, output?)` - Download files
+- `summary()` - Get complete data export
 
 ## Configuration
 
@@ -142,14 +196,16 @@ Restart Claude Code. All 8 Moodle functions are now available as native MCP tool
 ```json
 {
   "moodle": {
-    "base_url": "https://mytimes.taylors.edu.my",
-    "web_service_token": "YOUR_TOKEN_HERE"
+    "base_url": "https://your-moodle-site.example.com",
+    "web_service_token": ""
   },
   "cache": {
     "api_ttl_seconds": 300
   }
 }
 ```
+
+Leave `web_service_token` empty to use the automated SSO login flow. Set it manually if you already have a token.
 
 ### Batch Downloader (`downloads.json`)
 ```json
@@ -161,7 +217,7 @@ Restart Claude Code. All 8 Moodle functions are now available as native MCP tool
       "files": [
         {
           "name": "Week1.zip",
-          "url": "https://mytimes.taylors.edu.my/webservice/pluginfile.php/..."
+          "url": "https://your-moodle-site.example.com/webservice/pluginfile.php/..."
         }
       ]
     }
@@ -181,11 +237,12 @@ Restart Claude Code. All 8 Moodle functions are now available as native MCP tool
 
 Tested with:
 - Taylor's University (mytimes.taylors.edu.my)
+- Universidad Técnica Federico Santa María (aula.usm.cl) - Microsoft Azure AD SSO
 - Should work with any Moodle 3.x+ instance
 
 ## Security Notes
 
-- **Environment-enforced:** `MOODLE_CRED_PASSWORD` is **required** — no hardcoded defaults
+- **Environment-enforced:** `MOODLE_CRED_PASSWORD` is **required** - no hardcoded defaults
 - **Error sanitization:** MCP server sanitizes errors, no internal details leaked to clients
 - **Encrypted credentials:** PBKDF2 (480K iterations) + Fernet encryption
 - **Safe for headless:** Use `MOODLE_CRED_PASSWORD` env var for automation
@@ -194,18 +251,21 @@ Tested with:
 
 ## Troubleshooting
 
+### Browser opens but never closes
+The token redirect was not captured. Check if your University allows the usage of Moodle App.
+
 ### "Invalid parameter value detected" for calendar API
-Use `assignments()` instead — gets same deadline info.
+Use `assignments()` instead - gets same deadline info.
 
-### Browser MFA not triggering
-Run: `python moodle_connector.py login` for manual token retrieval.
+### Token expired / login required again
+Delete `credentials.enc` and run `python moodle_connector.py login` again.
 
 ### File download stuck
 Check network. Increase timeout in code or clear cache: `rm -rf cache/`
 
 ## License
 
-MIT — See LICENSE file for details. You are free to use, modify, and distribute this software.
+MIT - See LICENSE file for details. You are free to use, modify, and distribute this software.
 
 ## Contributing
 
@@ -215,43 +275,19 @@ Contributions welcome! Please:
 3. Submit a pull request
 4. Agree to license your work under GPLv3
 
-## Author
+## Authors
 
-**Jabir Iliyas Suraj-Deen**
+**Jabir Iliyas Suraj-Deen** - original author
 - GitHub: https://github.com/Jabir-Srj
 - Email: jabirsrj8@protonmail.com
 - Taylor's University, Kuala Lumpur, Malaysia
 
----
-
-**GitHub:** https://github.com/Jabir-Srj/moodle-connector
-**Release:** v1.0.0 (March 17, 2026)
- `python moodle_connector.py login` for manual token retrieval.
-
-### File download stuck
-Check network. Increase timeout in code or clear cache: `rm -rf cache/`
-
-## License
-
-GPLv3 — See LICENSE file for details.
-
-## Contributing
-
-Contributions welcome! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Submit a pull request
-4. Agree to license your work under GPLv3
-
-## Author
-
-**Jabir Iliyas Suraj-Deen**
-- GitHub: https://github.com/Jabir-Srj
-- Email: jabirsrj8@protonmail.com
-- Taylor's University, Kuala Lumpur, Malaysia
+**Sebastian Guevara M.** - SSO Mobile Launch Flow, multi-instance support
+- GitHub: https://github.com/SebaG20xx
+- Email: contacto@sebag20xx.cl
+- Universidad Técnica Federico Santa María, Viña del Mar, Chile
 
 ---
 
 **GitHub:** https://github.com/Jabir-Srj/moodle-connector
-**Release:** v1.0.0 (March 17, 2026)
-** v1.0.0 (March 17, 2026)
+**Release:** v1.1.0 (March 26, 2026)

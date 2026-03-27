@@ -57,6 +57,6 @@ All 8 Moodle tools will be available as native MCP functions.
 ## Requirements
 - Python 3.10+
 - requests, cryptography, playwright, mcp
-- Moodle web service token from mytimes.taylors.edu.my
+- Moodle web service token from your Moodle instance
 
 See README.md for full documentation.

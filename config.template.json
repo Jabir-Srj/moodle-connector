@@ -1,7 +1,7 @@
 {
-  "_comment": "Moodle connector config for mytimes.taylors.edu.my - TEMPLATE",
+  "_comment": "Moodle connector config - TEMPLATE. Set base_url to your Moodle instance.",
   "moodle": {
-    "base_url": "https://mytimes.taylors.edu.my",
+    "base_url": "https://your-moodle-site.example.com",
     "web_service_token": ""
   },
   "microsoft": {

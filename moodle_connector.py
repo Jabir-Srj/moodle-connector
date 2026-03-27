@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-moodle_connector.py - Robust Moodle connector for mytimes.taylors.edu.my
+moodle_connector.py - Robust Moodle connector for any Moodle instance
 
 Authenticates via Microsoft OAuth2/MFA, fetches courses/grades/assignments/
 announcements/materials, caches aggressively, and outputs structured Markdown.
@@ -224,7 +224,7 @@ class MicrosoftAuthenticator:
             log.warning("Browser login failed: %s", exc)
 
         # Strategy 3: Manual fallback
-        return self._manual_token_entry(creds)
+        return self._manual_token_entry(base_url, creds)
 
     def _try_moodle_login_token(self, base_url: str, username: str, password: str) -> Optional[str]:
         """Try Moodle's /login/token.php endpoint (works for local accounts)."""
@@ -245,74 +245,200 @@ class MicrosoftAuthenticator:
 
     def _playwright_sso_login(self, base_url: str, creds: dict) -> Optional[str]:
         """
-        Use Playwright to drive the Microsoft SSO / MFA flow and extract
-        the Moodle web-service token.
+        Obtain a Moodle web-service token via the Mobile Launch Flow.
 
-        The browser navigates to /login/token.php?service=moodle_mobile_app
-        which redirects through Microsoft login. After successful auth Moodle
-        returns a page with the token in JSON.
+        This is the same flow used by the official Moodle mobile app and works
+        with any SSO provider (Microsoft, Google, SAML, etc.).
+
+        Flow:
+        1. Navigate to /admin/tool/mobile/launch.php — Moodle redirects to SSO
+           if no session exists, or immediately to moodlemobile:// if already
+           logged in.
+        2. The user completes SSO + MFA interactively in the browser window.
+        3. Moodle issues an HTTP 302 to moodlemobile://token=<base64>.
+        4. We intercept that redirect (before the browser fails on the unknown
+           scheme), decode the base64 payload and extract the ws token.
+
+        Token payload format: SITE_ID:::WS_TOKEN[:::PRIVATE_TOKEN]
         """
-        from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
+        import base64 as _base64
+        from playwright.sync_api import sync_playwright
 
-        login_url = (
-            f"{base_url.rstrip('/')}/login/token.php"
-            f"?service=moodle_mobile_app"
+        base_url = base_url.rstrip("/")
+        passport = str(int(time.time()))
+        launch_url = (
+            f"{base_url}/admin/tool/mobile/launch.php"
+            f"?service=moodle_mobile_app&passport={passport}&urlscheme=moodlemobile"
         )
+
+        token: Optional[str] = None
+
+        def _extract_from_location(location: str) -> Optional[str]:
+            """Decode the base64 payload from a moodlemobile:// redirect URL."""
+            if not location.startswith("moodlemobile://token="):
+                return None
+            try:
+                b64 = location.split("token=", 1)[1]
+                # Add padding if needed
+                b64 += "=" * (-len(b64) % 4)
+                decoded = _base64.b64decode(b64).decode("utf-8")
+                parts = decoded.split(":::")
+                if len(parts) >= 2:
+                    return parts[1]
+            except Exception as exc:
+                log.warning("Failed to decode mobile launch token: %s", exc)
+            return None
+
+        # Detect headless environments (no display available).
+        # In that case the interactive browser cannot be shown; the caller will
+        # fall through to _manual_token_entry which explains what to do.
+        headless_env = not sys.stdin.isatty() or os.environ.get("DISPLAY") == "" or (
+            sys.platform != "win32"
+            and sys.platform != "darwin"
+            and not os.environ.get("DISPLAY")
+            and not os.environ.get("WAYLAND_DISPLAY")
+        )
+        if headless_env:
+            log.warning(
+                "No display detected — cannot open browser for SSO login. "
+                "Run 'python moodle_connector.py login' on a machine with a display "
+                "to cache the token, or set 'web_service_token' in config.json manually."
+            )
+            return None
 
         with sync_playwright() as pw:
             browser = pw.chromium.launch(headless=False)
             ctx = browser.new_context()
             page = ctx.new_page()
 
-            log.info("Opening browser for Microsoft login — complete MFA in the browser window.")
-            page.goto(login_url)
+            # Strategy A: HTTP 302 — intercept Location header in the response.
+            def _on_response(response) -> None:
+                nonlocal token
+                if token:
+                    return
+                location = response.headers.get("location", "")
+                extracted = _extract_from_location(location)
+                if extracted:
+                    token = extracted
+                    log.debug("Token captured via HTTP 302 Location header.")
 
-            # Pre-fill username if available
+            page.on("response", _on_response)
+
+            # Strategy B: JS/meta redirect — inject a script on every page load
+            # that intercepts window.location assignments and open() calls before
+            # the browser tries (and fails) to open the moodlemobile:// scheme.
+            page.add_init_script("""
+                (function () {
+                    function _capture(url) {
+                        if (url && url.indexOf('moodlemobile://token=') === 0) {
+                            window.__moodleTokenUrl = url;
+                        }
+                    }
+                    // Override window.location.href setter
+                    try {
+                        const desc = Object.getOwnPropertyDescriptor(Location.prototype, 'href');
+                        Object.defineProperty(Location.prototype, 'href', {
+                            set: function (url) { _capture(url); desc.set.call(this, url); },
+                            get: desc.get,
+                            configurable: true,
+                        });
+                    } catch (e) {}
+                    // Override window.location.replace / assign
+                    const _replace = Location.prototype.replace;
+                    Location.prototype.replace = function (url) { _capture(url); return _replace.call(this, url); };
+                    const _assign = Location.prototype.assign;
+                    Location.prototype.assign = function (url) { _capture(url); return _assign.call(this, url); };
+                    // Override window.open
+                    const _open = window.open;
+                    window.open = function (url) { _capture(url); return _open.apply(this, arguments); };
+                })();
+            """)
+
+            log.info(
+                "Browser opened — complete Microsoft SSO / MFA in the window. "
+                "The window will close automatically once the token is captured."
+            )
+
+            # Pre-fill username when the Microsoft login page loads
             username = creds.get("username") or creds.get("email", "")
-            if username:
+
+            def _prefill_username(frame) -> None:
+                if "login.microsoftonline.com" not in frame.url or not username:
+                    return
                 try:
-                    page.fill('input[type="email"], input[name="loginfmt"]', username, timeout=5000)
-                    page.keyboard.press("Enter")
-                    page.wait_for_timeout(1000)
+                    frame.fill(
+                        'input[type="email"], input[name="loginfmt"]',
+                        username,
+                        timeout=3000,
+                    )
+                    frame.press(
+                        'input[type="email"], input[name="loginfmt"]',
+                        "Enter",
+                        timeout=3000,
+                    )
                 except Exception:
                     pass
 
-            # Wait up to 3 minutes for the user to complete MFA
-            token = None
+            page.on("framenavigated", _prefill_username)
+
+            try:
+                page.goto(launch_url, wait_until="commit", timeout=10_000)
+            except Exception:
+                pass  # Expected if browser immediately hits moodlemobile://
+
+            # Poll until token is captured or 3-minute timeout is reached.
+            # Each iteration:
+            # 1. Checks the JS-injected window.__moodleTokenUrl (client-side redirects).
+            # 2. Tracks whether the browser visited the SSO provider, then detects
+            #    when it returns to Moodle and re-triggers launch.php so Moodle issues
+            #    the moodlemobile:// redirect with the token.
             deadline = time.time() + 180
-            while time.time() < deadline:
-                try:
-                    # Check if we're back on Moodle with a token page
-                    content = page.content()
-                    current_url = page.url
-                    if "token" in current_url or '"token"' in content or "token=" in current_url:
-                        # Try extracting token from URL query param
-                        from urllib.parse import urlparse, parse_qs
-                        parsed = urlparse(current_url)
-                        params = parse_qs(parsed.query)
-                        if "token" in params:
-                            token = params["token"][0]
-                            break
-                        # Try extracting from JSON body
-                        import re
-                        m = re.search(r'"token"\s*:\s*"([a-f0-9]{32,})"', content)
-                        if m:
-                            token = m.group(1)
-                            break
-                    page.wait_for_timeout(2000)
-                except PWTimeout:
+            _saw_sso = False
+            _relaunched = False
+            while not token and time.time() < deadline:
+                page.wait_for_timeout(1_000)
+                if token:
                     break
+
+                try:
+                    js_url = page.evaluate("window.__moodleTokenUrl || ''")
+                    if js_url:
+                        token = _extract_from_location(js_url)
+                        if token:
+                            log.debug("Token captured via JS redirect interception.")
+                            break
+                except Exception:
+                    pass
+
+                if not _relaunched:
+                    try:
+                        current = page.url
+                        log.debug("Polling URL: %s", current)
+                        on_sso = any(h in current for h in (
+                            "microsoftonline.com", "login.live.com", "login.microsoft.com"
+                        ))
+                        if on_sso:
+                            _saw_sso = True
+
+                        # Only relaunch after we have confirmed the SSO page was visited,
+                        # meaning the user has actually gone through (or is finishing) login.
+                        if _saw_sso and not on_sso:
+                            on_moodle = base_url in current
+                            on_launch = "launch.php" in current
+                            if on_moodle and not on_launch:
+                                log.info("SSO complete — re-triggering launch.php via JS navigation.")
+                                _relaunched = True
+                                page.evaluate(f"window.location.href = '{launch_url}'")
+                    except Exception as exc:
+                        log.debug("Relaunch check error: %s", exc)
 
             browser.close()
 
-            if token:
-                log.info("Browser login successful — token captured.")
-                # Save email/username from page if possible
-                return token
+        if token:
+            log.info("Mobile launch flow succeeded — token captured.")
+        return token
 
-        return None
-
-    def _manual_token_entry(self, creds: dict) -> str:
+    def _manual_token_entry(self, base_url: str, creds: dict) -> str:
         """
         Fallback: instruct the user to get their token manually.
         For automated agents, this will raise an error.
@@ -321,7 +447,7 @@ class MicrosoftAuthenticator:
         print("MANUAL AUTHENTICATION REQUIRED")
         print("="*60)
         print("Please obtain your Moodle web-service token:")
-        print("1. Log in to https://mytimes.taylors.edu.my")
+        print(f"1. Log in to {base_url}")
         print("2. Go to: User menu → Preferences → Security keys")
         print("   OR navigate to: /user/managetoken.php")
         print("3. Copy your Mobile App token")
@@ -333,8 +459,11 @@ class MicrosoftAuthenticator:
                 return token
 
         raise RuntimeError(
-            "Authentication required. Run 'python moodle_connector.py login' "
-            "interactively to complete Microsoft MFA."
+            "No token available and cannot authenticate interactively.\n"
+            "Options:\n"
+            "  1. Run 'python moodle_connector.py login' on a machine with a display "
+            "to cache the token in credentials.enc, then copy it to this environment.\n"
+            "  2. Set 'web_service_token' in config.json with a valid token."
         )
 
     def store_credentials(self, username: str = "", password: str = "", email: str = "") -> None:
@@ -855,7 +984,7 @@ class MoodleConnector:
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        description="Moodle connector for mytimes.taylors.edu.my",
+        description="Moodle connector — configure base_url in config.json",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p.add_argument("--config", default=str(CONFIG_FILE), help="Path to config.json")
